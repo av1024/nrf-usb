@@ -1,0 +1,21 @@
+#!/bin/bash
+
+echo "***************************************************************"
+echo "Make bootloader with 12MHz clock, 57600 baudrate, D6 (blue) led"
+echo "***************************************************************"
+echo ""
+
+make clean
+make OS=linux LED=D6 BAUD_RATE=57600 atmega328
+
+if [ -f optiboot_atmega328.hex ]; then
+
+    echo ""
+    echo Program boot via Arduino ISP
+    echo Fuse settings:
+    echo  - External clock, 6CK/14CK+65ms startup time, CKDIV8=disable
+    echo  - Boot size 256 words, SPIEN=enable, BOOTRST=enable
+    echo  - BODLEVEL=disable
+    echo ""
+    avrdude -u -P /dev/ttyUSB.D6UCRNII -p atmega328p -b19200 -c avrisp -U lock:w:0x3f:m -U flash:w:optiboot_atmega328.hex -U hfuse:w:0xDE:m -U lfuse:w:0xE0:m -U efuse:w:0xFF:m -U lock:w:0x0f:m
+fi

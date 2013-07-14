@@ -1,0 +1,29 @@
+/*
+
+TEST BLINK APP
+
+*/
+
+#define F_CPU 12000000L
+#include <avr/io.h>
+#include <util/delay.h>
+
+#define LED_R 5
+#define LED_B 6
+
+void setup() {
+    DDRD |= (1<<LED_R) | (1<<LED_B);
+}
+
+void main() {
+    setup();
+    while (1) {
+        PORTD |= (1<<LED_R);
+        _delay_ms(500);
+        PORTD &= ~(1<<LED_R);
+        _delay_ms(450);
+        PORTD |= (1<<LED_B);
+        _delay_ms(50);
+        PORTD &= ~(1<<LED_B);
+    }
+}
