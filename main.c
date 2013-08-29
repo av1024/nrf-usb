@@ -4,10 +4,13 @@ TEST BLINK APP
 
 */
 
-#define F_CPU 12000000L
+//#define F_CPU 12000000L
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
+
+#include <stdlib.h>
+//#define UART_BLOCK
 
 #include "gcc_macro.h"
 #include "nrf.h"
@@ -23,16 +26,17 @@ TEST BLINK APP
 #define LED_B_OFF   PORTD &= ~(1<<LED_B)
 #define LED_OFF     PORTD &= ~(1<<LED_B | 1<<LED_R)
 
-#define RF_CHANNEL 1
+#define RF_CHANNEL 110
 
-uint8_t nrf_rx_addr[ADDRESS_WIDTH] = {0xe7, 0xe7, 0xe7, 0xe7, 0xe7};
+uint8_t nrf_rx0_addr[ADDRESS_WIDTH] = {0xe7, 0xe7, 0xe7, 0xe7, 0xe7};
+uint8_t nrf_tx_addr[ADDRESS_WIDTH] = {0xe7, 0xe7, 0xe7, 0xe7, 0xe7};
+uint8_t nrf_rx1_addr[ADDRESS_WIDTH] = {0xc2, 0xc2, 0xc2, 0xc2, 0xc2};
 uint8_t nrf_cfg[] = {
-    (1<<ENAA_P0), // | (1<<ENAA_P1),
+    (1<<ENAA_P0) | (1<<ENAA_P1),
     //0,  //TEST: disable auto-ack for RF monitoring
-    //(1<<ERX_P0) | (1<<ERX_P1),
-    (1<<ERX_P0),
-    AW_3, // 3 bytes address
-    ARC_5 | ARD_1250, // 1250ms delay, 5 retransmits
+    (1<<ERX_P0) | (1<<ERX_P1),
+    AW_5, // 5 bytes address
+    ARC_5 | ARD_1000, // 1250ms delay, 5 retransmits
     RF_CHANNEL,
     RF_1MBPS | RF_0DBM
 };
@@ -44,22 +48,37 @@ void setup(void) {
     // LEDS
     DDRD |= (1<<LED_R) | (1<<LED_B);
     LED_B_ON;
+    LED_R_ON;
     // RS232
     uart_init(57600);
+    
     // NRF
     nrf_init();
-    nrf_rx_config(nrf_rx_addr);
-
-    nrf_config_register(RX_PW_P0, 3); // test!!!
-    nrf_config_register(RX_PW_P1, 3); // test!!!
+    
+    nrf_rx_config(nrf_cfg,
+                  nrf_rx0_addr,
+                  nrf_rx1_addr,
+                  nrf_tx_addr);
 
     nrf_config_register(FEATURE, (1<<EN_DPL));
-    nrf_config_register(DYNPD, (1<<DPL_P0));
+    nrf_config_register(DYNPD, (1<<DPL_P0)|(1<<DPL_P1)|(1<<DPL_P2)|(1<<DPL_P3)|(1<<DPL_P4)|(1<<DPL_P5));
+    //nrf_tx_config(nrf_rx_addr);
+
+    //nrf_write_register(RX_ADDR_P1, nrf_tx_addr, 5);
+
+
+    //nrf_config_register(RX_PW_P0, 32); // test!!!
+    //nrf_config_register(RX_PW_P1, 32); // test!!!
+
+    //nrf_config_register(FEATURE, 0);
+    //nrf_config_register(DYNPD, 0);
 
     RX_POWERUP;
     _delay_us(150);
     CE_HIGH;
     LED_B_OFF;
+    LED_R_OFF;
+    sei();
 }
 
 
@@ -133,6 +152,85 @@ void prt_cfg(void) {
 
 }
 
+void processNRF(uint8_t *buf, uint8_t sz, uint8_t pipe) {
+    uint32_t cntr;
+    uint8_t *c = (uint8_t *)&cntr;
+    uint8_t i;
+    uint8_t x;
+    char tmp[12];
+    sz &= 0x1F;
+    if (sz < 2) {
+        uart_print("RF size\n");
+    } else {
+        uart_print("From[");
+        uart_print_hex(pipe);
+        uart_print("] ");
+        uart_print_hex(*buf++);
+        uart_print(": ");
+        sz--;
+        switch(*buf) {
+            case 'o':
+                uart_print("ok\n");
+                break;
+            case 'a':
+                uart_print("VCC: ");
+                uart_print_dec(buf[1]/10);
+                uart_putch('.');
+                uart_print_dec(buf[1]%10);
+                uart_print("V, Light: ");
+                uart_print_dec(buf[2]);
+                uart_print(", Counter #1: ");
+                *c++ = buf[3];
+                *c++ = buf[4];
+                *c++ = buf[5];
+                *c = buf[6];
+                utoa(cntr, tmp, 10);
+                uart_print(tmp);
+                uart_print(", Counter #2: ");
+                c = (uint8_t*)&cntr;
+                *c++ = buf[7];
+                *c++ = buf[8];
+                *c++ = buf[9];
+                *c = buf[10];
+                utoa(cntr, tmp, 10);
+                uart_print(tmp);
+                uart_println();
+                break;
+            case 't':
+                uart_print("T [");
+                buf++;
+                for(i=0;i<8;i++) uart_print_hex(*buf++);
+                uart_print("]: ");
+                if (((signed char)*buf) < 0) {
+                    uart_putch('-');
+                    uart_print_dec((uint8_t)(-(signed char)(*buf)));
+                } else {
+                    if (!(*buf)) uart_putch(' ');
+                    else uart_putch('+');
+                    uart_print_dec(*buf);
+                }
+                uart_putch('.');
+                buf++;
+                uart_print_dec(*buf);
+                uart_print("C\n");
+                //uart_tx_flush();
+                break;
+            default:
+                buf--;
+                uart_print("DATA ");
+
+                for(register uint8_t i=0;i<32;i++) {
+                    uart_print_hex(buf[i]);
+                    uart_print(" ");
+                    //if (buf[1] == 0) break;
+                }
+                uart_println();
+        }
+    }
+    uart_tx_flush();
+
+}
+
 int main(void) {
     register uint8_t i;
     register uint8_t stat;
@@ -153,9 +251,17 @@ int main(void) {
         LED_B_OFF;
      */
 
-     prt_cfg();
+    prt_cfg();
 
     while (1) {
+        //nrf_rx_config(nrf_rx_addr);
+        RX_POWERUP;
+        _delay_ms(900);
+        LED_B_ON;
+        _delay_ms(100);
+        LED_B_OFF;
+        
+
         stat = nrf_command(NOP);
         // check if NRF module unplugged
         if (stat == 0xFF) {
@@ -164,74 +270,50 @@ int main(void) {
             _delay_ms(500);
             LED_R_OFF;
             _delay_ms(500);
+            uart_print("NRF down\n");
             setup();
             continue;
         }
-
-        nrf_fail = 0;
-        //nrf_command(NOP);
-        i = nrf_read(FIFO_STATUS);
-        if (i & ((1<<FIFO_TX_FULL) | (1<<FIFO_RX_FULL))) {
-            LED_R_ON;
-            if (i & (1<<FIFO_TX_FULL)) nrf_command(FLUSH_TX);
-            if (i & (1<<FIFO_RX_FULL)) nrf_command(FLUSH_RX);
-            LED_R_OFF;
+        //uart_print_hex(stat);
+        //uart_putch(' ');
+        stat = nrf_command(NOP);
+        if (stat & ((1<<MAX_RT) | (1<<TX_FULL))) {
+            nrf_config_register(STATUS, (1<<MAX_RT) | (1<<TX_FULL));
+            nrf_command(FLUSH_TX);
         }
 
-        i = nrf_read(RPD);
-        if (i & (0x1) && !prev_rpd) {
-            LED_B_ON;
-            prev_rpd = 1;
-            uart_print("CH ");
-            uart_print_dec(chan);
-            uart_print(": CD\n");
-        } else {
-            prev_rpd = 0;
-            if (!(i & 1)) LED_B_OFF;
-        }
+        while (nrf_data_available())
+        {
+	    LED_R_ON;
+            for(i=31;i>0;i--) buf[i] = 0;
+            i = nrf_command(NOP);
+            stat = nrf_read(R_RX_PL_WID);
+            //uart_print("cz:");
+            //uart_print_dec(stat);
+            //uart_println();
+            if (stat > 32) {
+                nrf_command(FLUSH_RX);
+                nrf_config_register(STATUS, (1<<RX_DR));
+                continue;
+            }
 
-        if (nrf_data_available()) {
-
-            for(i=0;i<32;i++) buf[i] = 0;
-            stat = nrf_read(R_RX_PAYLOAD);
-            i = nrf_get_payload(buf, 32);
+            i = nrf_command(NOP);
+            nrf_get_payload(buf, stat); // pipe + 1 or 0
             nrf_config_register(STATUS, (1<<RX_DR));
             //uart_send...
-            if (i) {
-                uart_print("CH ");
-                uart_print_dec(chan);
-                uart_print("[");
-                uart_print_dec(stat);
-                uart_print("]: ");
-                uart_print_dec(i);
+            //if (i) {
 
-                uart_print(": ");
-                for(i=31;i>31-3;i--) {
-                    uart_print_hex(buf[i]);
-                    uart_print(" ");
-                    if (buf[1] == 0) break;
-                }
-                uart_println();
-            }
-            _delay_ms(1);
+                processNRF(buf, stat, i);
+
+            //}
+            //else {
+
+            //}
+	    LED_R_OFF;
 
         }
-        _delay_ms(1);
-        cnt++;
-        if (cnt > 3000) {
-            LED_R_ON;
-            i = nrf_read(FIFO_STATUS);
-            chan++;
-            chan &= 0x7F;
-            cnt = 0;
-            CE_LOW;
-            nrf_config_register(RF_CH, chan);
-            RX_POWERUP;
-            _delay_us(150);
-            CE_HIGH;
-            //prt_cfg();
-            LED_R_OFF;
-        }
+
     }
+
     return 0;
 }

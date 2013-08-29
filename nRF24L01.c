@@ -54,8 +54,7 @@ static void spi_transfer_sync (uint8_t *dataout, uint8_t *datain, uint8_t len)
 // Shift full array through target device
 // This send the LSByte first, as required by NRF24L01
 {
-   uint8_t i;
-
+    uint8_t i;
     for (i = len; i > 0; i--) {
         // Load data in SPDR
         SPDR = dataout[i-1];
@@ -64,6 +63,7 @@ static void spi_transfer_sync (uint8_t *dataout, uint8_t *datain, uint8_t len)
 
         datain[i-1] = SPDR;
     }
+
 }
 
 
@@ -77,6 +77,7 @@ static void spi_transmit_sync (uint8_t * dataout, uint8_t len)
         SPDR = dataout[i-1];
         SPI_WAIT;
     }
+
 }
 
 static uint8_t spi_fast_shift (uint8_t data)
@@ -111,7 +112,7 @@ uint8_t nrf_read(uint8_t reg)
 {
     uint8_t r;
     CSN_LOW;  // ISP Slave on
-    spi_fast_shift(R_REGISTER | (REGISTER_MASK & reg));
+    spi_fast_shift(reg); //R_REGISTER | (REGISTER_MASK & reg));
     r = spi_fast_shift(NOP);
     CSN_HIGH; // ISP Slave off
     return r;
@@ -153,6 +154,7 @@ uint8_t nrf_send_completed()
 
     if ((status & (1<<MAX_RT)) || (status & (1<<TX_DS)))
     {
+        nrf_config_register(STATUS, (1<<TX_DS));
         return 1;
     }
     else
@@ -162,17 +164,16 @@ uint8_t nrf_send_completed()
 
 }
 
-void nrf_send(uint8_t * value, uint8_t len)
+uint8_t nrf_send(uint8_t * value, uint8_t len)
 // Sends a data package to the default address. Be sure to send the correct
 // amount of bytes as configured as payload on the receiver.
 {
-    CE_LOW
 
     TX_POWERUP                     // Power up NRF
-    _delay_us(130);
+    _delay_us(150);
 
-    nrf_config_register(STATUS,(1<<TX_DS)|(1<<MAX_RT)); // clear status register, write 1 to clear bit.
 
+    nrf_config_register(STATUS,(1<<TX_DS)|(1<<MAX_RT)|(1<<TX_FULL)); // clear status register, write 1 to clear bit.
 
     CSN_LOW                    // Pull down chip select
     spi_fast_shift( FLUSH_TX );     // Write cmd to flush tx fifo
@@ -185,17 +186,19 @@ void nrf_send(uint8_t * value, uint8_t len)
 
     CE_HIGH                     // Start transmission
     _delay_us(15);
-    CE_LOW
+
                                     // Wait until data is sent or MAX_RT flag
     while(!(nrf_send_completed())); // This function return 1 if data was transmitted or after MAX_RT.
-
+    CE_LOW
+    if (nrf_command(NOP) & (1<<MAX_RT)) return 0;
+    return 1;
 }
 // ***********************************      END NRF24L01 Basic Functions     ***************************************** //
 
 
 void nrf_init(void) {
 
-    cli();
+    //cli();
     // IRQ support setup
     DDR_ISP |= (1<<CE);
 
@@ -236,7 +239,7 @@ void nrf_init(void) {
     #endif // IRQINT
 
     spi_init();
-    sei();
+    //sei();
 
     // power-on sequence
     CE_HIGH;
@@ -247,8 +250,13 @@ void nrf_init(void) {
     _delay_ms(10);
 }
 
-void nrf_rx_config(uint8_t *rx_addr) {
 
+void nrf_rx_config(uint8_t * config_buf,
+                   uint8_t *rx0_addr,
+                   uint8_t *rx1_addr,
+                   uint8_t *tx_addr) {
+
+    register uint8_t i;
     CE_LOW;
 
     //TODO: read addresses from EEPROM
@@ -256,18 +264,24 @@ void nrf_rx_config(uint8_t *rx_addr) {
 
     // basic config (data size, auto-ack, rf)
     for(uint8_t i=0;i<6;i++) {
-        nrf_config_register(i+1, nrf_cfg[i]);
+        nrf_config_register(i+1, config_buf[i]);
     }
 
-    // rx address
-    nrf_write_register(RX_ADDR_P0, rx_addr, ADDRESS_WIDTH);
+    // rx/tx address
+    nrf_write_register(RX_ADDR_P0, rx0_addr, ADDRESS_WIDTH);
+    nrf_write_register(RX_ADDR_P1, rx1_addr, ADDRESS_WIDTH);
+    for(i=0;i<4;i++) nrf_config_register(RX_ADDR_P2+i, rx1_addr[ADDRESS_WIDTH-1]+1+i);
+
+    nrf_write_register(TX_ADDR, tx_addr, ADDRESS_WIDTH);
 
     // payload width (fixed)
-    for (uint8_t i=0;i<6;i++) {
+    for (i=0;i<6;i++) {
         nrf_config_register(RX_PW_P0+i, PAYLOAD_WIDTH);
     }
 
-    //TODO: enable FEATURE and set DYNPD
+    // disable FEATURE and DYNPD by default
+    nrf_config_register(FEATURE, 0);
+    nrf_config_register(DYNPD, 0);
 
     // reset IRQs
     nrf_command(FLUSH_TX);
@@ -275,11 +289,12 @@ void nrf_rx_config(uint8_t *rx_addr) {
     nrf_config_register(STATUS, (1<<RX_DR)|(1<<TX_DS)|(1<<MAX_RT));
 
     // activate RX mode
-    RX_POWERUP;
-    _delay_us(150);
+    //RX_POWERUP;
+    //_delay_us(150);
     CE_HIGH;
 }
 
+/*
 void nrf_tx_config(uint8_t * addr) {
 
     CE_LOW;
@@ -297,6 +312,7 @@ void nrf_tx_config(uint8_t * addr) {
     // activate TX mode
     CE_HIGH;
 }
+*/
 
 uint8_t nrf_data_available(void)
 // Returns payload pipe#+1 if data aveilable, 0 if no data in pipe
@@ -318,13 +334,16 @@ uint8_t nrf_get_payload(uint8_t *buf, uint8_t len) {
     // returns 1..7 as (payload pipe+1) and filled buf on success
     uint8_t stat;
     uint8_t reg;
-
+/*
     stat = nrf_command(NOP);
     if (!(stat & (1<<RX_DR))) return 0;
 
     reg = ((stat >> 1) & 0x07) + 1;
     if (reg >= 0x80) return 0; // fifo empty
 
+    CE_LOW;
+    */
+    reg = ((nrf_command(NOP) >> 1) & 0x07) + 1;
     CSN_LOW                    // Pull down chip select
     spi_fast_shift( R_RX_PAYLOAD ); // Send Read Payload Command
     spi_transfer_sync(buf, buf, len);   // Read payload

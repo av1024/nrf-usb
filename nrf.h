@@ -9,8 +9,8 @@
     #define CLK      PB5
     #define MOSI     PB3
     #define MISO     PB4
-    //IRQ1
-    #define IRQ      PD3
+    //IRQ0
+    #define IRQ      PD2
     #define PORT_IRQ PORTD
     #define DDR_IRQ  DDRD
     #define DDR_ISP  DDRB
@@ -21,8 +21,8 @@
     #define CLK      PB7
     #define MOSI     PB5
     #define MISO     PB6
-    //IRQ1
-    #define IRQ      PD3
+    //IRQ0
+    #define IRQ      PD2
     #define PORT_IRQ PORTD
     #define DDR_IRQ  DDRD
     #define DDR_ISP  DDRB
@@ -44,7 +44,7 @@
 // define as 0 or 1 for corresponding INT0/INT1, other value for custom IRQ pin
 // The only INT0/INT1 with falling edge initialization performed
 // Comment out to disable IRQ
-//#define IRQINT  1
+//#define IRQINT  0
 
 #ifndef IRQINT
   // No IRQ handler
@@ -64,11 +64,11 @@
     ((MASK_IRQ_TX)<<MASK_TX_DS) \
     | ((MASK_IRQ_MAX)<<MASK_MAX_RT) \
     | ((MASK_IRQ_RX)<<PWR_UP) \
-    /*| (1<<EN_CRC) | (1<<CRCO) */);
+    | (1<<EN_CRC) | (1<<CRCO));
 #define RX_POWERUP        nrf_config_register(CONFIG, \
     ((MASK_IRQ_TX)<<MASK_TX_DS) \
     | ((MASK_IRQ_MAX)<<MASK_MAX_RT) \
     | ((MASK_IRQ_RX)<<MASK_RX_DR) \
-    | (1<<PWR_UP) /*| (1<<EN_CRC) | (1<<CRCO) */ | (1<<PRIM_RX) );
+    | (1<<PWR_UP) | (1<<EN_CRC) | (1<<CRCO) | (1<<PRIM_RX) );
 
 #endif  //__NRF_H__

@@ -136,20 +136,21 @@
 #define ARC_15      0x0F
 
 /* Instruction Mnemonics */
-#define R_REGISTER    0x00
-#define W_REGISTER    0x20
-#define REGISTER_MASK 0x1F
-#define R_RX_PAYLOAD  0x61
-#define W_TX_PAYLOAD  0xA0
-#define FLUSH_TX      0xE1
-#define FLUSH_RX      0xE2
-#define REUSE_TX_PL   0xE3
-#define NOP           0xFF
+#define R_REGISTER          0x00
+#define W_REGISTER          0x20
+#define REGISTER_MASK       0x1F
+#define R_RX_PAYLOAD        0x61
+#define W_TX_PAYLOAD        0xA0
+#define FLUSH_TX            0xE1
+#define FLUSH_RX            0xE2
+#define REUSE_TX_PL         0xE3
+// Note(from datasheet): Flush RX FIFO if result value greater then 32 bytes
+#define R_RX_PL_WID         0x60
+//NB: set first 3 bits as pipe # (0b000...0b101)
+#define W_ACK_PAYLOAD       0xA8
+#define W_TX_PAYLOAD_NOACK  0xB0
+#define NOP                 0xFF
 
-
-
-//NB! you should define it in `main.c`
-extern uint8_t nrf_cfg[6];
 
 /*
 static void spi_init(void);
@@ -159,7 +160,14 @@ static uint8_t spi_fast_shift (uint8_t);
 */
 
 void nrf_init(void);
-void nrf_rx_config(uint8_t *rx_addr); // setup RX mode. !!!Should be called before TX setup!!!
+
+
+//void NRFConfig(NRFSetup *cfg);
+
+void nrf_rx_config(uint8_t * config_buf,
+                   uint8_t *rx0_addr,
+                   uint8_t *rx1_addr,
+                   uint8_t *tx_addr); // setup RX mode. !!!Should be called before TX setup!!!
 void nrf_tx_config(uint8_t * addr); // Switch ***FROM RX*** to TX mode NB! call nrf_rx_config() first
 
 
@@ -171,7 +179,9 @@ void nrf_write_register(uint8_t reg, uint8_t * value, uint8_t len);
 
 uint8_t nrf_send_completed(void);
 
-void nrf_send(uint8_t *value, uint8_t len); // send (PAYLOAD_WIDTH) bytes from buffer
+// send (PAYLOAD_WIDTH) bytes from buffer
+// return 1 on success, 0 if MAX_RT reached
+uint8_t nrf_send(uint8_t *value, uint8_t len);
 uint8_t nrf_data_available(void); // returns (pipe#+1) if data found, 0 if no data in pipe(s)
 uint8_t nrf_get_payload(uint8_t *buf, uint8_t len); // fill buffer[PAYLOAD_WIDTH] with payload
 

@@ -7,13 +7,18 @@
 #include "gcc_macro.h"
 #include "uart.h"
 
-volatile static uint8_t __tx_buf[UART_TX_BUF_SIZE];
-volatile static uint8_t __rx_buf[UART_RX_BUF_SIZE];
+#define UART_TX_BUF_MASK (UART_TX_BUF_SIZE-1)
+#define UART_RX_BUF_MASK (UART_RX_BUF_SIZE-1)
 
+static volatile struct {
+    uint8_t in, out, cnt;
+    uint8_t buf [UART_TX_BUF_SIZE];
+} _tx;
 
-volatile static uint8_t rx_t=0, rx_cnt=0,
-        tx_h=0, tx_cnt=0,
-        rx_h=0, tx_t=0;
+static volatile struct {
+    uint8_t in, out, cnt;
+    uint8_t buf [UART_RX_BUF_SIZE];
+} _rx;
 
 
 //#define BAUD(x) ( (F_CPU/8/x-1) / 2 )
@@ -50,135 +55,130 @@ void uart_init_b(uint16_t ubrr) {
     #endif
 }
 
-NOINLINE void uart_putch(uint8_t data) {
+NOINLINE uint8_t uart_putch(uint8_t data) {
+    uint8_t sreg = SREG;
 
-    #if defined(UART_BLOCK)
-    #warning BLOCKING UART MODE
-    uint8_t srg = SREG;
-    sei();
-    //FIXME: add anti-lock timer
-    while(tx_cnt >= UART_TX_BUF_SIZE) { ; }
-    SREG = srg;
+    // Return failure for non-blocking mode
+    #ifdef UART_BLOCK
+        #warning *** UART IN BLOCKING MODE ***
+        while(_tx.cnt >= UART_TX_BUF_SIZE) { ; }
+    #else
+        if (_tx.cnt >= UART_TX_BUF_SIZE) return 0;
     #endif
 
+    cli();
     #ifdef RS485PORT
         RS485PORT |= (1<<RS485PIN); // switch to TX
     #endif
 
-    //while ( !(UCSRA & (1<<UDRE)) ); // waitfor tx empty
-    if ( (UCSRA & (1<<UDRE)) && (tx_cnt==0) ) {
-        UDR = data;
-        UCSRB |= (1<<UDRIE);
-    } else
-        if (tx_cnt < UART_TX_BUF_SIZE) {
-            __tx_buf[tx_t] = data;
-            tx_cnt++;
-            tx_t++;
-            if ( tx_t==UART_TX_BUF_SIZE ) tx_t = 0;
-            UCSRB |= (1<<UDRIE);
-        }
+    _tx.buf[_tx.in] = data;
+    _tx.in = (_tx.in + 1) & UART_TX_BUF_MASK;
+    _tx.cnt++;
+    UCSRB |= (1<<UDRIE);
 
+    SREG=sreg;
+    return 1;
 }
 
 uint8_t uart_getch(void) {
-    uint8_t ch = 0;
-    if (rx_cnt > 0) {
-        ch = __rx_buf[rx_h];
-        rx_cnt--;
-        rx_h++;
-        if ( rx_h == UART_RX_BUF_SIZE ) rx_h = 0;
+    register uint8_t ch = 0;
+    register uint8_t sreg;
+    if (_rx.cnt > 0) {
+        sreg = SREG;
+        cli();
+        ch = _rx.buf[_rx.out];
+        _rx.out = (_rx.out + 1) & UART_RX_BUF_MASK;
+        _rx.cnt--;
+        SREG = sreg;
     }
     return ch;
 }
 
-INLINE uint8_t uart_rx_empty(void) {
-    return (rx_cnt == 0);
-}
-
 INLINE uint8_t uart_rx_count(void) {
-    return rx_cnt;
-}
-
-INLINE uint8_t uart_tx_empty(void) {
-    return (tx_cnt == 0);
+    return _rx.cnt;
 }
 
 INLINE uint8_t uart_tx_count(void) {
-    return tx_cnt;
+    return _tx.cnt;
 }
 
 void uart_rx_flush(void) {
-    rx_cnt = 0;
-    rx_t = 0;
-    rx_h = 0;
+    UNUSED uint8_t dummy;
+    while ( UCSRA & (1<<RXC0) ) dummy = UDR;
+    _rx.cnt = 0;
 }
 
 void uart_tx_flush(void) {
-    if (tx_cnt) {
-        UCSRB |= (1<<UDRIE);
-        while(tx_cnt) { ; }
-
-        UCSRB &= ~(1<<UDRIE);
-    }
-    tx_h = 0;
-    tx_t = 0;
+    while (_tx.cnt) ;
+    while (! (UCSRA & (1 << TXC))) ;
 }
 
-void uart_print(const char *str) {
+NOINLINE uint8_t uart_print(const char *str) {
     while (*str ) {
-        uart_putch(*str++);
+        if (!uart_putch(*str++)) return 0;
     }
+    return 1;
 }
 
-inline void uart_println(void){
-    uart_putch('\r');
-    uart_putch('\n');
+inline uint8_t uart_println(void){
+    return uart_putch('\n');
 }
 
-void uart_print_hex(uint8_t b) {
+uint8_t uart_print_hex(uint8_t b) {
     uint8_t c = b >> 4;
     if (c > 9) c += 7;
-    uart_putch(c + '0');
+    if (!uart_putch(c + '0')) return 0;
     c = b & 0x0F;
     if (c > 9) c += 7;
-    uart_putch(c + '0');
+    return uart_putch(c + '0');
 }
 
-void uart_print_dec(uint8_t b) {
+uint8_t uart_print_dec(uint8_t b) {
     uint8_t c, x, z;
     c = (b / 100); // x100
     x = b % 100;
     z = x / 10;    // x10
-    if (c) uart_putch(c + '0');     // >= 100
-    if (b > 9) uart_putch(z + '0'); // >= 10
-    uart_putch('0' + (x % 10));     // 0..9
+    if (c)
+        if (!uart_putch(c + '0')) return 0;     // >= 100
+    if (b > 9)
+        if (!uart_putch(z + '0')) return 0; // >= 10
+    return uart_putch('0' + (x % 10));     // 0..9
 }
 
-void uart_print_bin(uint8_t b) {
+uint8_t uart_print_bin(uint8_t b) {
     for(uint8_t i=0;i<8;i++) {
-        if ( b & (0x80 >> i) ) uart_putch('1');
-        else uart_putch('0');
+        if ( b & (0x80 >> i) ) {
+            if (!uart_putch('1')) return 0;
+        }
+        else
+            if (!uart_putch('0')) return 0;
     }
+    return 1;
 }
 
-void uart_print_mem(uint8_t *mem, uint8_t count) {
+uint8_t uart_print_mem(uint8_t *mem, uint8_t count) {
     while(count--)
-        uart_print_hex(*mem++);
+        if (!uart_print_hex(*mem++)) return 0;
+    return 1;
 }
 
-void uart_print_mem_d(uint8_t *mem, uint8_t count, char delim) {
+uint8_t uart_print_mem_d(uint8_t *mem, uint8_t count, char delim) {
     for(register uint8_t i=0;i<count;i++) {
-        if (i) uart_putch(delim);
-        uart_print_hex(*mem++);
+        if (i)
+            if (!uart_putch(delim)) return 0;
+        if (!uart_print_hex(*mem++)) return 0;
     }
+    return 1;
 }
 
-void uart_print_p(const char *str) {
+uint8_t uart_print_p(const char *str) {
     uint8_t c;
     do {
         c = pgm_read_byte(str++);
-        if (c != 0) uart_putch(c);
+        if (c != 0)
+            if (!uart_putch(c)) return 0;
     } while (c);
+    return 1;
 }
 
 
@@ -189,28 +189,23 @@ ISR(USART0_TXC_vect) {
 #endif
 
 ISR(USART0_UDRE_vect) {
-    cli();
-    if (tx_cnt > 0) {
-        UDR = __tx_buf[tx_h];
-        tx_cnt--;
-        tx_h++;
-        if ( tx_h == UART_TX_BUF_SIZE) tx_h = 0;
+    UCSRA &= (1<<TXC);
+    if (_tx.cnt) {
+        UDR = _tx.buf[_tx.out];
+        _tx.out = (_tx.out + 1) & UART_TX_BUF_MASK;
+        _tx.cnt--;
+    } else {
+        UCSRB &= ~(1 << UDRIE);
     }
-    else {
-        UCSRB &= ~(1<<UDRIE);
-        tx_h = 0;
-        tx_t = 0;
-    }
-    sei();
 }
 
 ISR(USART0_RXC_vect) {
-    cli();
-    if (rx_cnt < UART_RX_BUF_SIZE) {
-        __rx_buf[rx_t] = UDR;
-        rx_t++;
-        if ( rx_t == UART_RX_BUF_SIZE ) rx_t = 0;
-        rx_cnt++;
+
+    uint8_t tmp;
+    _rx.buf[_rx.in] = UDR;
+    tmp = (_rx.in + 1) &  UART_RX_BUF_MASK;
+    if (tmp != _rx.out) {
+        _rx.in = tmp;
+        _rx.cnt++;
     }
-    sei();
 }

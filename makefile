@@ -18,8 +18,10 @@ MY_AVRDUDE_PROGRAMMER = arduino
 #usbasp
 
 # Порт, к которому подключен программатор
-MY_PROGRAMMER_PORT = /dev/ttyUSB.A8WP4PO3 -b 57600
+MY_PROGRAMMER_PORT = /dev/ttyUSB.NRF -b 57600
 
+# Дополнительные глобальные дефайны
+USER_DEFS = -DUART_BLOCK
 #======================================================================================================================================================
 
 
@@ -212,7 +214,7 @@ CSTANDARD = -std=gnu99
 
 
 # Place -D or -U options here for C sources
-CDEFS = -DF_CPU=$(F_CPU)UL
+CDEFS = -DF_CPU=$(F_CPU)UL $(USER_DEFS)
 
 
 # Place -D or -U options here for C++ sources
@@ -235,7 +237,7 @@ CFLAGS += -O$(OPT)
 CFLAGS += -ffunction-sections
 CFLAGS += -fdata-sections
 #CFLAGS += -mint8
-#CFLAGS += -mshort-calls
+//CFLAGS += -mshort-calls
 CFLAGS += -funsigned-char
 CFLAGS += -funsigned-bitfields
 CFLAGS += -fpack-struct
@@ -244,8 +246,18 @@ CFLAGS += -fshort-enums
 CFLAGS += -Wall
 CFLAGS += -Wstrict-prototypes
 CFLAGS += -Wundef
-#CFLAGS += -Wunreachable-code
-#CFLAGS += -Wsign-compare
+CFLAGS += -Wunreachable-code
+CFLAGS += -Wsign-compare
+#### untested optimizations:
+#CFLAGS += --param inline-call-cost=2 -finline-limit=3 -fno-inline-small-functions
+CFLAGS += -ffreestanding
+CFLAGS += -fno-tree-scev-cprop
+#CFLAGS += -fno-split-wide-types
+# -- AV --
+CFLAGS += -maccumulate-args
+CFLAGS += -mrelax
+#CFLAGS += -fms-extensions
+####
 CFLAGS += -Wa,-adhlns=$(<:%.c=$(OBJDIR)/%.lst)
 CFLAGS += $(patsubst %,-I%,$(EXTRAINCDIRS))
 CFLAGS += $(CSTANDARD)

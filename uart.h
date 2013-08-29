@@ -49,6 +49,8 @@
     #define UCSZ0   (UCSZ00)
     #define UCSZ1   (UCSZ01)
     #define UCSZ2   (UCSZ02)
+    #define TXC     (TXC0)
+    #define RXC     (RXC0)
 
 #endif
 
@@ -63,29 +65,34 @@
 
 // blocking printing
 // define UART_BLOCK 1 for block uart_putch() if no room for next char
-#define UART_BLOCK
+//#define UART_BLOCK
 
 #define uart_pprint(x)  uart_print_p(PSTR(x))
-
+#define uart_rx_empty() uart_rx_count()
+#define uart_tx_empty() uart_tx_count()
 #define uart_init(baud) uart_init_b((((F_CPU >> 3)/baud-1) >> 1))
-void uart_init_b(uint16_t ubrr);
-void uart_putch(uint8_t data);
+void uart_init_b(uint16_t ubrr);  // Use `uart_init` for baud rate initialization
+
+// Put char into queue.
+// *** MAY BLOCK *** if UART_BLOCK defined and no room in buffer
+uint8_t uart_putch(uint8_t data);
+
+// Get char from queue. Return 0 if no data
 uint8_t uart_getch(void);
-uint8_t uart_rx_empty(void);
+
 uint8_t uart_rx_count(void);
-uint8_t uart_tx_empty(void);
 uint8_t uart_tx_count(void);
 void uart_rx_flush(void);
-void uart_tx_flush(void);
-void uart_print(const char *str);
-void uart_print_hex(uint8_t b);
-void uart_print_dec(uint8_t b);
-void uart_print_bin(uint8_t b);
+void uart_tx_flush(void);   // Block until all data transmitted
+uint8_t uart_print(const char *str);
+uint8_t uart_print_hex(uint8_t b);
+uint8_t uart_print_dec(uint8_t b);
+uint8_t uart_print_bin(uint8_t b);
 
-void uart_print_p(const char *str);
-void uart_println(void);
+uint8_t uart_print_p(const char *str);
+uint8_t uart_println(void);
 
-void uart_print_mem(uint8_t *mem, uint8_t count);
-void uart_print_mem_d(uint8_t *mem, uint8_t count, char delim);
+uint8_t uart_print_mem(uint8_t *mem, uint8_t count);
+uint8_t uart_print_mem_d(uint8_t *mem, uint8_t count, char delim);
 
 #endif  // __UART_H__
