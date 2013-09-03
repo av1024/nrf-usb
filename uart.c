@@ -32,11 +32,10 @@ void uart_init_b(uint16_t ubrr) {
     UCSRA = 0; //(1<<U2X);
 
     // Enable all interrupts and tx/rx lines
-    //UCSRB = (1<<RXCIE) | (1<<TXCIE) | (1<<UDRIE) | (1<<RXEN) | (1<<TXEN);
+    // refactor: all sending via TXC
+    //UCSRB = (1<<RXCIE) | (1<<TXCIE) | (0<<UDRIE) | (1<<RXEN) | (1<<TXEN);
     UCSRB =   (1<<RXCIE)
-            #ifdef RS485PIN
             | (1<<TXCIE)
-            #endif
             | (1<<RXEN)
             | (1<<TXEN)
             ;
@@ -50,13 +49,13 @@ void uart_init_b(uint16_t ubrr) {
 
     // RS485 support
     #ifdef RS485PIN
-    RS485PORTD |= (1<<RS485PIN);
-    RS485PORT &= ~(1<<RS485PIN);
+        RS485PORTD |= (1<<RS485PIN);
+        RS485PORT &= ~(1<<RS485PIN);
     #endif
 }
 
 NOINLINE uint8_t uart_putch(uint8_t data) {
-    uint8_t sreg = SREG;
+    register uint8_t sreg = SREG;
 
     // Return failure for non-blocking mode
     #ifdef UART_BLOCK
@@ -73,8 +72,13 @@ NOINLINE uint8_t uart_putch(uint8_t data) {
 
     _tx.buf[_tx.in] = data;
     _tx.in = (_tx.in + 1) & UART_TX_BUF_MASK;
+    if (!_tx.cnt) {
+        UDR = _tx.buf[_tx.out];
+        _tx.out = (_tx.out + 1) & UART_TX_BUF_MASK;
+    }
     _tx.cnt++;
-    UCSRB |= (1<<UDRIE);
+    //UCSRA |= (1<<TXC);
+    //UCSRB |= (1<<UDRIE);
 
     SREG=sreg;
     return 1;
@@ -110,7 +114,7 @@ void uart_rx_flush(void) {
 
 void uart_tx_flush(void) {
     while (_tx.cnt) ;
-    while (! (UCSRA & (1 << TXC))) ;
+    //while (! (UCSRA & (1 << TXC))) ;
 }
 
 NOINLINE uint8_t uart_print(const char *str) {
@@ -182,12 +186,21 @@ uint8_t uart_print_p(const char *str) {
 }
 
 
-#ifdef RS485PIN
-ISR(USART0_TXC_vect) {
-    RS485PORT &= ~(1<<RS485PIN);
-}
-#endif
 
+ISR(USART0_TXC_vect) {
+    if (_tx.cnt) _tx.cnt--;
+    if (_tx.cnt) {
+        UDR = _tx.buf[_tx.out];
+        _tx.out = (_tx.out + 1) & UART_TX_BUF_MASK;
+    }
+#ifdef RS485PIN
+    else {
+        RS485PORT &= ~(1<<RS485PIN);
+    }
+#endif
+}
+
+/*
 ISR(USART0_UDRE_vect) {
     UCSRA &= (1<<TXC);
     if (_tx.cnt) {
@@ -198,9 +211,8 @@ ISR(USART0_UDRE_vect) {
         UCSRB &= ~(1 << UDRIE);
     }
 }
-
+*/
 ISR(USART0_RXC_vect) {
-
     uint8_t tmp;
     _rx.buf[_rx.in] = UDR;
     tmp = (_rx.in + 1) &  UART_RX_BUF_MASK;

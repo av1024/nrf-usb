@@ -14,7 +14,7 @@ TEST BLINK APP
 
 #include "gcc_macro.h"
 #include "nrf.h"
-#include "nRF24L01.h"
+#include "nrf/nRF24L01.h"
 #include "uart.h"
 
 #define LED_R 5
@@ -51,10 +51,10 @@ void setup(void) {
     LED_R_ON;
     // RS232
     uart_init(57600);
-    
+
     // NRF
     nrf_init();
-    
+
     nrf_rx_config(nrf_cfg,
                   nrf_rx0_addr,
                   nrf_rx1_addr,
@@ -240,6 +240,13 @@ int main(void) {
     uint16_t cnt = 0;
 
     setup();
+    /*for(;;) {
+        LED_R_ON;
+        _delay_ms(100);
+        uart_putch('.');
+        LED_R_OFF;
+        _delay_ms(900);
+    }*/
     uart_pprint("NRF-USB\n");
     /*
         LED_R_ON;
@@ -257,10 +264,10 @@ int main(void) {
         //nrf_rx_config(nrf_rx_addr);
         RX_POWERUP;
         _delay_ms(900);
-        LED_B_ON;
+        //LED_B_ON;
         _delay_ms(100);
-        LED_B_OFF;
-        
+        //LED_B_OFF;
+
 
         stat = nrf_command(NOP);
         // check if NRF module unplugged

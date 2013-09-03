@@ -1,0 +1,3 @@
+[submodule "nrf"]
+	path = nrf
+	url = git@github.com:av1024/nrf.git

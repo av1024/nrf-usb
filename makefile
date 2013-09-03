@@ -22,6 +22,8 @@ MY_PROGRAMMER_PORT = /dev/ttyUSB.NRF -b 57600
 
 # Дополнительные глобальные дефайны
 USER_DEFS = -DUART_BLOCK
+SRC_DIRS += nrf
+#SRC += $(wildcard nrf/*.c)
 #======================================================================================================================================================
 
 
@@ -165,6 +167,7 @@ OBJDIR = .obj
 
 # List C source files here. (C dependencies are automatically generated.)
 SRC = $(wildcard *.c)
+SRC += $(wildcard $(addsuffix /*.c, $(SRC_DIRS)))
 # hd44780.c
 
 #uart.o : $(AVRLIB)/uart2.c $(AVRLIB)/uart2.h
@@ -467,6 +470,7 @@ MSG_CREATING_LIBRARY = Создание библиотеки:
 
 # Define all object files.
 OBJ = $(SRC:%.c=$(OBJDIR)/%.o) $(CPPSRC:%.cpp=$(OBJDIR)/%.o) $(ASRC:%.S=$(OBJDIR)/%.o)
+OBJ += $(addprefix $(OBJDIR),$(wildcard $(addsuffix /*.o, $(SRC_DIRS))))
 
 # Define all listing files.
 LST = $(SRC:%.c=$(OBJDIR)/%.lst) $(CPPSRC:%.cpp=$(OBJDIR)/%.lst) $(ASRC:%.S=$(OBJDIR)/%.lst)
@@ -484,15 +488,15 @@ ALL_ASFLAGS = -mmcu=$(MCU) -I. -x assembler-with-cpp $(ASFLAGS)
 
 
 
-
-
 # Default target.
 all: begin gccversion sizebefore build sizeafter end
 
 # Change the build target to build a HEX file or a library.
-build: elf hex eep lss sym
+build: obj_dir elf hex eep lss sym
 #build: lib
 
+obj_dir :
+    $(shell mkdir -p $(OBJDIR)/$(SRC_DIRS))
 
 elf: $(BUILDDIR)/$(TARGET).elf
 hex: $(TARGET).hex
@@ -711,4 +715,6 @@ $(shell mkdir $(BUILDDIR) 2>/dev/null)
 # Listing of phony targets.
 .PHONY : all begin finish end sizebefore sizeafter gccversion \
 build elf hex eep lss sym coff extcoff \
-clean clean_list program debug gdb-config
+clean clean_list program debug gdb-config \
+obj_dir
+

@@ -1,6 +1,5 @@
 # 1 "baudcheck.c"
-# 1 "/home/av/prog/Atmel/nrf_usb/boot//"
-# 1 "<built-in>"
+# 1 "/home/av/prog/Atmel/nrf-usb/boot//"
 # 1 "<command-line>"
 # 1 "baudcheck.c"
 # 20 "baudcheck.c"
