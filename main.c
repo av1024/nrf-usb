@@ -15,7 +15,7 @@ TEST BLINK APP
 #include "gcc_macro.h"
 #include "nrf.h"
 #include "nrf/nRF24L01.h"
-#include "uart.h"
+#include "uart/uart.h"
 
 #define LED_R 5
 #define LED_B 6
@@ -33,7 +33,6 @@ uint8_t nrf_tx_addr[ADDRESS_WIDTH] = {0xe7, 0xe7, 0xe7, 0xe7, 0xe7};
 uint8_t nrf_rx1_addr[ADDRESS_WIDTH] = {0xc2, 0xc2, 0xc2, 0xc2, 0xc2};
 uint8_t nrf_cfg[] = {
     (1<<ENAA_P0) | (1<<ENAA_P1),
-    //0,  //TEST: disable auto-ack for RF monitoring
     (1<<ERX_P0) | (1<<ERX_P1),
     AW_5, // 5 bytes address
     ARC_5 | ARD_1000, // 1250ms delay, 5 retransmits
@@ -42,7 +41,13 @@ uint8_t nrf_cfg[] = {
 };
 
 uint8_t nrf_fail = 0;
-
+/*
+ISR(WDT_vect) {
+    LED_B_ON;
+    //wdt_reset();
+    //WD_STOP;
+}
+*/
 void setup(void) {
 
     // LEDS
@@ -60,24 +65,15 @@ void setup(void) {
                   nrf_rx1_addr,
                   nrf_tx_addr);
 
-    nrf_config_register(FEATURE, (1<<EN_DPL));
-    nrf_config_register(DYNPD, (1<<DPL_P0)|(1<<DPL_P1)|(1<<DPL_P2)|(1<<DPL_P3)|(1<<DPL_P4)|(1<<DPL_P5));
-    //nrf_tx_config(nrf_rx_addr);
-
-    //nrf_write_register(RX_ADDR_P1, nrf_tx_addr, 5);
-
-
-    //nrf_config_register(RX_PW_P0, 32); // test!!!
-    //nrf_config_register(RX_PW_P1, 32); // test!!!
-
-    //nrf_config_register(FEATURE, 0);
-    //nrf_config_register(DYNPD, 0);
+    //nrf_config_register(FEATURE, (1<<EN_DPL));
+    //nrf_config_register(DYNPD, (1<<DPL_P0)|(1<<DPL_P1)|(1<<DPL_P2)|(1<<DPL_P3)|(1<<DPL_P4)|(1<<DPL_P5));
 
     RX_POWERUP;
     _delay_us(150);
     CE_HIGH;
     LED_B_OFF;
     LED_R_OFF;
+
     sei();
 }
 
@@ -131,24 +127,6 @@ void prt_cfg(void) {
     uart_pprint(" TX: ");
     for(x=0;x<5;x++) uart_print_hex(addr[x]);
     uart_println();
-
-    /*
-    uart_pprint("SPI REGS/SPCR,SPSR,DDRB,PORTB,PINB,PORTD,PIND/: ");
-        uart_print_hex(SPCR);
-        uart_putch(' ');
-        uart_print_hex(SPSR);
-        uart_putch(' ');
-        uart_print_hex(DDRB);
-        uart_putch(' ');
-        uart_print_hex(PORTB);
-        uart_putch(' ');
-        uart_print_hex(PINB);
-        uart_putch(' ');
-        uart_print_hex(PORTD);
-        uart_putch(' ');
-        uart_print_hex(PIND);
-        uart_println();
-    */
 
 }
 
@@ -240,23 +218,16 @@ int main(void) {
     uint16_t cnt = 0;
 
     setup();
-    /*for(;;) {
+    /*
+    for(;;) {
         LED_R_ON;
         _delay_ms(100);
         uart_putch('.');
         LED_R_OFF;
+        uart_tx_flush();
         _delay_ms(900);
-    }*/
+    } */
     uart_pprint("NRF-USB\n");
-    /*
-        LED_R_ON;
-        _delay_ms(500);
-        LED_R_OFF;
-        _delay_ms(450);
-        LED_B_ON;
-        _delay_ms(50);
-        LED_B_OFF;
-     */
 
     prt_cfg();
 
@@ -265,7 +236,7 @@ int main(void) {
         RX_POWERUP;
         _delay_ms(900);
         //LED_B_ON;
-        _delay_ms(100);
+        //_delay_ms(100);
         //LED_B_OFF;
 
 
@@ -291,7 +262,7 @@ int main(void) {
 
         while (nrf_data_available())
         {
-	    LED_R_ON;
+        LED_R_ON;
             for(i=31;i>0;i--) buf[i] = 0;
             i = nrf_command(NOP);
             stat = nrf_read(R_RX_PL_WID);
@@ -316,7 +287,7 @@ int main(void) {
             //else {
 
             //}
-	    LED_R_OFF;
+        LED_R_OFF;
 
         }
 

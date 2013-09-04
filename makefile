@@ -23,6 +23,7 @@ MY_PROGRAMMER_PORT = /dev/ttyUSB.NRF -b 57600
 # Дополнительные глобальные дефайны
 USER_DEFS = -DUART_BLOCK
 SRC_DIRS += nrf
+SRC_DIRS += uart
 #SRC += $(wildcard nrf/*.c)
 #======================================================================================================================================================
 
@@ -496,7 +497,8 @@ build: obj_dir elf hex eep lss sym
 #build: lib
 
 obj_dir :
-    $(shell mkdir -p $(OBJDIR)/$(SRC_DIRS))
+	$(foreach dir,$(SRC_DIRS),mkdir -p $(OBJDIR)/$(dir);)
+    #$(shell mkdir -p $(OBJDIR)/$(SRC_DIRS))
 
 elf: $(BUILDDIR)/$(TARGET).elf
 hex: $(TARGET).hex
