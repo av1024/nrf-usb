@@ -1,0 +1,7 @@
+
+# NRF24L01-USB adapter
+SUBSYSTEM=="tty", ACTION=="add", ATTRS{idProduct}=="6001", ATTRS{idVendor}=="0403", ATTRS{product}=="*UART NRF24L01", MODE="0666", SYMLINK+="ttyUSB.NRF", GOTO="end"
+# Other FT232 adapters
+SUBSYSTEM=="tty", ACTION=="add", ATTRS{idProduct}=="6001", ATTRS{idVendor}=="0403", MODE="0666", SYMLINK+="ttyUSB.$attr{serial}"
+
+LABEL="end"

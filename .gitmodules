@@ -1,3 +1,6 @@
 [submodule "nrf"]
 	path = nrf
 	url = git@github.com:av1024/nrf.git
+[submodule "uart"]
+	path = uart
+	url = git@github.com:av1024/uart.git
